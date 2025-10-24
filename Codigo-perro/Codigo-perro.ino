@@ -21,12 +21,12 @@
 #define LED2 26
 #define LED3 27
 
-void printBMP_OLED(void);
-void printBMP_OLED2(void);
-void printBMP_OLED3(void);
-void printBMP_OLED4(void);
-void printBMP_OLED5(void);
-void printBMP_OLED6(void);
+void menu(void);
+void ptemp(void);
+void pluz(void);
+void pgas(void);
+void pgmt(void);
+void penvio(void);
 
 
 Adafruit_AHTX0 aht;
@@ -37,12 +37,12 @@ LiquidCrystal_I2C lcd(LCD_ADDR, 16, 2);
 
 
 #define RST 0
-#define P1 0
-#define TEMP 1
-#define LUZ 2
-#define GAS 3
-#define GMT 4
-#define ENVIO 5
+#define P1 2
+#define TEMP 3
+#define LUZ 4
+#define GAS 5
+#define GMT 6
+#define ENVIO 7
 #define ESPERA1 10
 #define ESPERA2 14
 #define ESPERA3 15
@@ -77,7 +77,7 @@ int uMq4 = 50;
 int uMq9 = 50;
 int uGmt = 0;
 int uEnvio = 30;
-
+int millis_valor;
 
 void setup() {
   Serial.begin(115200);
@@ -149,7 +149,7 @@ void loop() {
     case P1:
       Serial.println("p1");
 
-      printBMP_OLED();
+  
       if (digitalRead(BOTON1) == LOW) {
         estado = ESPERA1;
       }
@@ -407,81 +407,24 @@ void loop() {
 }
 
 void menu(void) {
-  char stringU[5];
-  char stringtemp[5];
-  u8g2.clearBuffer();                 // clear the internal memory
-  u8g2.setFont(u8g2_font_t0_11b_tr);  // choose a suitable font
-  sprintf(stringtemp, "%.2f", temp);  ///convierto el valor float a string
-  sprintf(stringU, "%d", valorU);     ///convierto el valor float a string
-  u8g2.drawStr(0, 35, "T. Actual:");
-  u8g2.drawStr(60, 35, stringtemp);
-  u8g2.drawStr(90, 35, " C");
-  u8g2.drawStr(0, 50, "V. Umbral:");
-  u8g2.drawStr(60, 50, stringU);
-  u8g2.drawStr(75, 50, " C");
-  u8g2.sendBuffer();  // transfer internal memory to the display
+
 }
 
 void ptemp(void) {
-  char stringU[5];
-  u8g2.clearBuffer();  // clear the internal memory
-  sprintf(stringU, "%d", valorU);
-  u8g2.setFont(u8g2_font_t0_11b_tr);  // choose a suitable font
-  u8g2.drawStr(0, 50, "V. Umbral:");
-  u8g2.drawStr(60, 50, stringU);
-  u8g2.drawStr(75, 50, " C");
-  u8g2.sendBuffer();  // transfer internal memory to the display
+
 }
 
 void pluz(void) {
-  char stringU[5];
-  char stringtemp[5];
-  u8g2.clearBuffer();                 // clear the internal memory
-  u8g2.setFont(u8g2_font_t0_11b_tr);  // choose a suitable font
-  sprintf(stringtemp, "%.2f", temp);  ///convierto el valor float a string
-  sprintf(stringU, "%d", valorU);     ///convierto el valor float a string
-  u8g2.drawStr(0, 35, "T. Actual:");
-  u8g2.drawStr(60, 35, stringtemp);
-  u8g2.drawStr(90, 35, " C");
-  u8g2.drawStr(0, 50, "V. Umbral:");
-  u8g2.drawStr(60, 50, stringU);
-  u8g2.drawStr(75, 50, " C");
-  u8g2.sendBuffer();  // transfer internal memory to the display
+
 }
 
 void pgas(void) {
-  char stringU[5];
-  u8g2.clearBuffer();  // clear the internal memory
-  sprintf(stringU, "%d", valorU);
-  u8g2.setFont(u8g2_font_t0_11b_tr);  // choose a suitable font
-  u8g2.drawStr(0, 50, "V. Umbral:");
-  u8g2.drawStr(60, 50, stringU);
-  u8g2.drawStr(75, 50, " C");
-  u8g2.sendBuffer();  // transfer internal memory to the display
+ 
 }
 void pgmt(void) {
-  char stringU[5];
-  char stringtemp[5];
-  u8g2.clearBuffer();                 // clear the internal memory
-  u8g2.setFont(u8g2_font_t0_11b_tr);  // choose a suitable font
-  sprintf(stringtemp, "%.2f", temp);  ///convierto el valor float a string
-  sprintf(stringU, "%d", valorU);     ///convierto el valor float a string
-  u8g2.drawStr(0, 35, "T. Actual:");
-  u8g2.drawStr(60, 35, stringtemp);
-  u8g2.drawStr(90, 35, " C");
-  u8g2.drawStr(0, 50, "V. Umbral:");
-  u8g2.drawStr(60, 50, stringU);
-  u8g2.drawStr(75, 50, " C");
-  u8g2.sendBuffer();  // transfer internal memory to the display
+
 }
 
 void penvio(void) {
-  char stringU[5];
-  u8g2.clearBuffer();  // clear the internal memory
-  sprintf(stringU, "%d", valorU);
-  u8g2.setFont(u8g2_font_t0_11b_tr);  // choose a suitable font
-  u8g2.drawStr(0, 50, "V. Umbral:");
-  u8g2.drawStr(60, 50, stringU);
-  u8g2.drawStr(75, 50, " C");
-  u8g2.sendBuffer();  // transfer internal memory to the display
+
 }

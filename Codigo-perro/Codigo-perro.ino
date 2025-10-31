@@ -2,8 +2,10 @@
 
 #include <Wire.h>
 #include <Adafruit_AHTX0.h>
-#include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <Preferences.h>
+
+Preferences preferences;
 
 #define LCD_ADDR 0x27
 
@@ -93,6 +95,14 @@ void setup() {
   pinMode(LED2, OUTPUT);
   pinMode(LED3, OUTPUT);
 
+  preferences.begin("umbrales", false);
+  uTemp = preferences.getInt("uTemp", 23);
+  uHum = preferences.getInt("uHum", 50);
+  uLuz = preferences.getInt("uLuz", 50);
+  uMq4 = preferences.getInt("uMq4", 50);
+  uMq9 = preferences.getInt("uMq9", 50);
+  uGmt = preferences.getInt("uGmt", 0);
+  uEnvio = preferences.getInt("uEnvio", 30);
 
   Wire.begin(SDA_PIN, SCL_PIN);
   lcd.init();
@@ -104,42 +114,6 @@ void setup() {
     while (1)
       ;
   }
-
-
-  //EN EL LOOP
-  //GAS
-  lecturaMQ4 = analogRead(MQ4_PIN);  // Lee valor analógico
-  valorMQ4 = map(lecturaMQ4, 0, 4095, 0, 100);
-  lecturaMQ9 = analogRead(MQ9_PIN);
-  valorMQ9 = map(lecturaMQ9, 0, 4095, 0, 100);
-  Serial.print("Valor MQ-4: ");
-  Serial.print(valorMQ4);
-  Serial.println("%");
-  Serial.print("Valor MQ-9: ");
-  Serial.print(valorMQ9);
-  Serial.println("%");
-
-  //LDR
-  int lecturaLDR = analogRead(LDR_PIN);  // Lee valor analógico
-  int valorLDR = map(lecturaLDR, 0, 4095, 0, 100);
-  Serial.print("Valor LDR: ");
-  Serial.print(valorLDR);
-  Serial.println("%");
-
-  //TEMPERATURA
-  sensors_event_t humidity, temp;
-  aht.getEvent(&humidity, &temp);
-
-  Serial.print("🌡️  Temperatura: ");
-  Serial.print(temp.temperature);
-  Serial.println(" °C");
-  Serial.print("💧 Humedad: ");
-  Serial.print(humidity.relative_humidity);
-  Serial.println(" %");
-
-  //DISPLAY
-  lcd.setCursor(0, 1);
-  lcd.print("Contador: ");
 }
 
 void loop() {
@@ -148,7 +122,7 @@ void loop() {
     ultimoEstado = estado;
   }
 
-  if (millis() - millis_valor > 2000) {
+  if (millis() - millis_valor > uEnvio *1000) {
     leerSensores();
     millis_valor = millis();
   }
@@ -290,108 +264,102 @@ void loop() {
 
     case SUMATEMP:
       if (digitalRead(BOTON1) == HIGH) {
-        uTemp = uTemp + 1;
+        uTemp++;
+        preferences.putInt("uTemp", uTemp);  // ✅ guarda en EEPROM
         estado = TEMP;
       }
-
       break;
 
     case RESTATEMP:
       if (digitalRead(BOTON2) == HIGH) {
-        uTemp = uTemp - 1;
-        if (uTemp < 0) {
-          uTemp = 0;
-        }
+        uTemp--;
+        if (uTemp < 0) uTemp = 0;
+        preferences.putInt("uTemp", uTemp);  // ✅ guarda en EEPROM
         estado = TEMP;
       }
       break;
 
+
     case SUMAHUM:
       if (digitalRead(BOTON3) == HIGH) {
-        uHum = uHum + 1;
-        if (uHum > 100) {
-          uHum = 0;
-        }
+        uHum++;
+        if (uHum > 100) uHum = 0;
+        preferences.putInt("uHum", uHum);  // ✅ guarda en EEPROM
         estado = TEMP;
       }
       break;
 
     case RESTAHUM:
       if (digitalRead(BOTON4) == HIGH) {
-        uHum = uHum - 1;
-        if (uHum < 0) {
-          uHum = 100;
-        }
+        uHum--;
+        if (uHum < 0) uHum = 100;
+        preferences.putInt("uHum", uHum);
         estado = TEMP;
       }
       break;
 
+
     case SUMALUZ:
       if (digitalRead(BOTON1) == HIGH) {
-        uLuz = uLuz + 1;
-        if (uLuz > 100) {
-          uLuz = 0;
-        }
+        uLuz++;
+        if (uLuz > 100) uLuz = 0;
+        preferences.putInt("uLuz", uLuz);
         estado = LUZ;
       }
       break;
 
     case RESTALUZ:
       if (digitalRead(BOTON2) == HIGH) {
-        uLuz = uLuz - 1;
-        if (uLuz < 0) {
-          uLuz = 100;
-        }
+        uLuz--;
+        if (uLuz < 0) uLuz = 100;
+        preferences.putInt("uLuz", uLuz);
         estado = LUZ;
       }
       break;
 
+
     case SUMAMQ4:
       if (digitalRead(BOTON1) == HIGH) {
-        uMq4 = uMq4 + 1;
-        if (uMq4 > 100) {
-          uMq4 = 0;
-        }
+        uMq4++;
+        if (uMq4 > 100) uMq4 = 0;
+        preferences.putInt("uMq4", uMq4);
         estado = GAS;
       }
       break;
 
     case RESTAMQ4:
       if (digitalRead(BOTON2) == HIGH) {
-        uMq4 = uMq4 - 1;
-        if (uMq4 < 0) {
-          uMq4 = 100;
-        }
+        uMq4--;
+        if (uMq4 < 0) uMq4 = 100;
+        preferences.putInt("uMq4", uMq4);
         estado = GAS;
       }
       break;
 
     case SUMAMQ9:
       if (digitalRead(BOTON3) == HIGH) {
-        uMq9 = uMq9 + 1;
-        if (uMq9 > 100) {
-          uMq9 = 0;
-        }
+        uMq9++;
+        if (uMq9 > 100) uMq9 = 0;
+        preferences.putInt("uMq9", uMq9);
         estado = GAS;
       }
       break;
 
     case RESTAMQ9:
       if (digitalRead(BOTON4) == HIGH) {
-        uMq9 = uMq9 - 1;
-        if (uMq9 < 0) {
-          uMq9 = 100;
-        }
+        uMq9--;
+        if (uMq9 < 0) uMq9 = 100;
+        preferences.putInt("uMq9", uMq9);
         estado = GAS;
       }
       break;
 
+
     case SUMAGMT:
       if (digitalRead(BOTON1) == HIGH) {
         uGmt++;
-        if (uGmt > 12) {
-          uGmt = -12;
-        }
+        if (uGmt > 12) uGmt = -12;
+        preferences.putInt("uGmt", uGmt);
         estado = GMT;
       }
       break;
@@ -399,26 +367,26 @@ void loop() {
     case RESTAGMT:
       if (digitalRead(BOTON2) == HIGH) {
         uGmt--;
-        if (uGmt < 12) {
-          uGmt = 12;
-        }
+        if (uGmt < -12) uGmt = 12;
+        preferences.putInt("uGmt", uGmt);
         estado = GMT;
       }
       break;
 
+
     case SUMAENVIO:
       if (digitalRead(BOTON1) == HIGH) {
-        uEnvio = uEnvio + 30;
+        uEnvio += 30;
+        preferences.putInt("uEnvio", uEnvio);
         estado = ENVIO;
       }
       break;
 
     case RESTAENVIO:
       if (digitalRead(BOTON2) == HIGH) {
-        uEnvio = uEnvio - 30;
-        if (uEnvio < 30) {
-          uEnvio = 30;
-        }
+        uEnvio -= 30;
+        if (uEnvio <= 30) uEnvio = 30;
+        preferences.putInt("uEnvio", uEnvio);
         estado = ENVIO;
       }
       break;
@@ -446,9 +414,9 @@ void leerSensores() {
 
 void menu(void) {
   lcd.setCursor(0, 0);
-  lcd.print(" MENU PRINCIPAL ");
+  lcd.print("MENU:1:TEM 2:LUZ");
   lcd.setCursor(0, 1);
-  lcd.print("1:TEMP 2:LUZ 3:GAS 4:GMT 5:ENVIO");
+  lcd.print("3:GAS 4:GMT 5:ENV");
 }
 
 void ptemp(void) {

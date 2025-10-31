@@ -37,7 +37,7 @@ LiquidCrystal_I2C lcd(LCD_ADDR, 16, 2);
 
 
 #define RST 0
-#define P1 2
+#define MENU 2
 #define TEMP 3
 #define LUZ 4
 #define GAS 5
@@ -78,6 +78,9 @@ int uMq9 = 50;
 int uGmt = 0;
 int uEnvio = 30;
 int millis_valor;
+int ultimoEstado = -1;
+
+
 
 void setup() {
   Serial.begin(115200);
@@ -94,6 +97,8 @@ void setup() {
   Wire.begin(SDA_PIN, SCL_PIN);
   lcd.init();
   lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("BIENVENIDO");
   if (!aht.begin(&Wire)) {
     Serial.println("❌ Error: No se detectó el AHT10. Revisá las conexiones.");
     while (1)
@@ -138,18 +143,27 @@ void setup() {
 }
 
 void loop() {
+  if (estado != ultimoEstado) {
+    lcd.clear();
+    ultimoEstado = estado;
+  }
+
+  if (millis() - millis_valor > 2000) {
+    leerSensores();
+    millis_valor = millis();
+  }
 
   switch (estado) {
     case RST:
 
       millis_valor = millis();
-      estado = P1;
+      estado = MENU;
       break;
 
-    case P1:
-      Serial.println("p1");
+    case MENU:
+      Serial.println("MENU");
 
-  
+      menu();
       if (digitalRead(BOTON1) == LOW) {
         estado = ESPERA1;
       }
@@ -205,11 +219,12 @@ void loop() {
     case ESPERA6:
       if (digitalRead(BOTON5) == HIGH) {
         Serial.println("boton 5  soltado");
-        estado = P1;
+        estado = MENU;
       }
       break;
 
     case TEMP:
+      ptemp();
       if (digitalRead(BOTON1) == LOW) {
         estado = SUMATEMP;
       }
@@ -225,6 +240,7 @@ void loop() {
       break;
 
     case LUZ:
+      pluz();
       if (digitalRead(BOTON1) == LOW) {
         estado = SUMALUZ;
       }
@@ -235,6 +251,7 @@ void loop() {
       break;
 
     case GAS:
+      pgas();
       if (digitalRead(BOTON1) == LOW) {
         estado = SUMAMQ4;
       }
@@ -250,6 +267,7 @@ void loop() {
       break;
 
     case GMT:
+      pgmt();
       if (digitalRead(BOTON1) == LOW) {
         estado = SUMAGMT;
       }
@@ -260,6 +278,7 @@ void loop() {
       break;
 
     case ENVIO:
+      penvio();
       if (digitalRead(BOTON1) == LOW) {
         estado = SUMAENVIO;
       }
@@ -406,25 +425,76 @@ void loop() {
   }
 }
 
-void menu(void) {
+void leerSensores() {
+  lecturaMQ4 = analogRead(MQ4_PIN);
+  valorMQ4 = map(lecturaMQ4, 0, 4095, 0, 100);
 
+  lecturaMQ9 = analogRead(MQ9_PIN);
+  valorMQ9 = map(lecturaMQ9, 0, 4095, 0, 100);
+
+  int lecturaLDR = analogRead(LDR_PIN);
+  int valorLDR = map(lecturaLDR, 0, 4095, 0, 100);
+
+  sensors_event_t humidity, temp;
+  aht.getEvent(&humidity, &temp);
+
+  Serial.printf("Temp: %.1f°C  Hum: %.1f%%  MQ4:%d%% MQ9:%d%% LDR:%d%%\n",
+                temp.temperature, humidity.relative_humidity,
+                valorMQ4, valorMQ9, valorLDR);
+}
+
+
+void menu(void) {
+  lcd.setCursor(0, 0);
+  lcd.print(" MENU PRINCIPAL ");
+  lcd.setCursor(0, 1);
+  lcd.print("1:TEMP 2:LUZ 3:GAS 4:GMT 5:ENVIO");
 }
 
 void ptemp(void) {
-
+  lcd.setCursor(0, 0);
+  lcd.print("TEMP: ");
+  lcd.print(uTemp);
+  lcd.print(" C   ");  // espacios para limpiar
+  lcd.setCursor(0, 1);
+  lcd.print("HUM : ");
+  lcd.print(uHum);
+  lcd.print(" %   ");
 }
 
 void pluz(void) {
-
+  lcd.setCursor(0, 0);
+  lcd.print(" UMBRAL DE LUZ ");
+  lcd.setCursor(0, 1);
+  lcd.print(uLuz);
+  lcd.print(" %   ↑↓ Cambiar");
 }
 
 void pgas(void) {
- 
+  lcd.setCursor(0, 0);
+  lcd.print("MQ4: ");
+  lcd.print(uMq4);
+  lcd.print(" %     ");
+  lcd.setCursor(0, 1);
+  lcd.print("MQ9: ");
+  lcd.print(uMq9);
+  lcd.print(" %     ");
 }
-void pgmt(void) {
 
+void pgmt(void) {
+  lcd.setCursor(0, 0);
+  lcd.print(" AJUSTE DE GMT ");
+  lcd.setCursor(0, 1);
+  lcd.print("UTC ");
+  if (uGmt >= 0) lcd.print("+");
+  lcd.print(uGmt);
+  lcd.print("   ↑↓ Cambiar");
 }
 
 void penvio(void) {
-
+  lcd.setCursor(0, 0);
+  lcd.print(" INTERVALO ENVIO ");
+  lcd.setCursor(0, 1);
+  lcd.print(uEnvio);
+  lcd.print(" s   ↑↓ Cambiar");
 }

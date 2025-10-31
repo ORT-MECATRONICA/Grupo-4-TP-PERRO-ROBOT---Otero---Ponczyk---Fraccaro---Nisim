@@ -20,7 +20,7 @@ void setup() {
   lcd.backlight();  // Encender luz de fondo
 
   lcd.setCursor(0, 0);
-  lcd.print("   Hola, Roman!");
+  lcd.print("Hola, Roman!");
 
 
   Serial.println("Pantalla LCD inicializada correctamente.");

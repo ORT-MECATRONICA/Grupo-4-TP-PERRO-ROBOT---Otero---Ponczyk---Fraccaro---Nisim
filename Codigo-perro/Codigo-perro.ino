@@ -25,14 +25,14 @@ Preferences preferences;
 #define LCD_ADDR 0x27
 #define SDA_PIN 21
 #define SCL_PIN 22
-//#define MQ4_PIN 32
-//#define MQ9_PIN 33
-//#define LDR_PIN 34
+#define MQ4_PIN 32
+#define MQ9_PIN 33
+#define LDR_PIN 34
 #define BOTON1 27
 #define BOTON2 26
 #define BOTON3 25
-#define BOTON4 32
-#define BOTON5 33
+#define BOTON4 35
+#define BOTON5 36
 #define LED1 13
 #define LED2 12
 #define LED3 14
@@ -95,11 +95,11 @@ void setup() {
   pinMode(LED1, OUTPUT);
   pinMode(LED2, OUTPUT);
   pinMode(LED3, OUTPUT);
-  pinMode(BOTON1, INPUT_PULLUP);
-  pinMode(BOTON2, INPUT_PULLUP);
-  pinMode(BOTON3, INPUT_PULLUP);
-  pinMode(BOTON4, INPUT_PULLUP);
-  pinMode(BOTON5, INPUT_PULLUP);
+  pinMode(BOTON1, INPUT);
+  pinMode(BOTON2, INPUT);
+  pinMode(BOTON3, INPUT);
+  pinMode(BOTON4, INPUT);
+  pinMode(BOTON5, INPUT);
 
   preferences.begin("umbrales", false);
   uTemp = preferences.getInt("uTemp", 23);
@@ -155,11 +155,17 @@ void setup() {
 
 void CodigoTarea1(void* pvParameters) {
   for (;;) {
+    if (digitalRead(BOTON1) == LOW) {
+      Serial.println("1");
+    }
+    if (digitalRead(BOTON2) == LOW) {
+      Serial.println("2");
+    }
+    if (digitalRead(BOTON3) == LOW) Serial.println("3");
+    if (digitalRead(BOTON4) == LOW) Serial.println("4");
+    if (digitalRead(BOTON5) == LOW) Serial.println("5");
     unsigned long now = millis();
-    //if (estado != ultimoEstado) {
-    //  lcd.clear();
-    //  ultimoEstado = estado;
-    //}
+
 
     // Leer sensores cada uEnvio segundos
     /*
@@ -175,12 +181,12 @@ void CodigoTarea1(void* pvParameters) {
         break;
 
       case MENU:
-        if (ultimoEstado != MENU) {  // solo dibujar cuando se entra al menú
+        if (estado != ultimoEstado) {
           lcd.clear();
           menu();
           Serial.println("MENU");
+          ultimoEstado = estado;
         }
-        ultimoEstado = MENU;
 
         if (digitalRead(BOTON1) == LOW) estado = ESPERA1;
         if (digitalRead(BOTON2) == LOW) estado = ESPERA2;
@@ -188,6 +194,7 @@ void CodigoTarea1(void* pvParameters) {
         if (digitalRead(BOTON4) == LOW) estado = ESPERA4;
         if (digitalRead(BOTON5) == LOW) estado = ESPERA5;
         break;
+
 
 
       case ESPERA1:
@@ -211,7 +218,9 @@ void CodigoTarea1(void* pvParameters) {
         break;
 
       case ESPERA6:
-        if (digitalRead(BOTON5) == HIGH) estado = MENU;
+        if (digitalRead(BOTON5) == HIGH || digitalRead(BOTON5) == !LOW) {
+          estado = MENU;
+        }
         break;
 
       case TEMP:
@@ -221,6 +230,7 @@ void CodigoTarea1(void* pvParameters) {
         if (digitalRead(BOTON2) == LOW) estado = RESTATEMP;
         if (digitalRead(BOTON3) == LOW) estado = SUMAHUM;
         if (digitalRead(BOTON4) == LOW) estado = RESTAHUM;
+        if (digitalRead(BOTON5) == LOW) estado = ESPERA6;
         break;
 
       case LUZ:
@@ -228,6 +238,8 @@ void CodigoTarea1(void* pvParameters) {
         pluz();
         if (digitalRead(BOTON1) == LOW) estado = SUMALUZ;
         if (digitalRead(BOTON2) == LOW) estado = RESTALUZ;
+        if (digitalRead(BOTON5) == LOW) estado = ESPERA6;
+
         break;
 
       case GAS:
@@ -237,6 +249,7 @@ void CodigoTarea1(void* pvParameters) {
         if (digitalRead(BOTON2) == LOW) estado = RESTAMQ4;
         if (digitalRead(BOTON3) == LOW) estado = SUMAMQ9;
         if (digitalRead(BOTON4) == LOW) estado = RESTAMQ9;
+        if (digitalRead(BOTON5) == LOW) estado = ESPERA6;
         break;
 
       case GMT:
@@ -244,6 +257,7 @@ void CodigoTarea1(void* pvParameters) {
         pgmt();
         if (digitalRead(BOTON1) == LOW) estado = SUMAGMT;
         if (digitalRead(BOTON2) == LOW) estado = RESTAGMT;
+        if (digitalRead(BOTON5) == LOW) estado = ESPERA6;
         break;
 
       case ENVIO:
@@ -251,6 +265,7 @@ void CodigoTarea1(void* pvParameters) {
         penvio();
         if (digitalRead(BOTON1) == LOW) estado = SUMAENVIO;
         if (digitalRead(BOTON2) == LOW) estado = RESTAENVIO;
+        if (digitalRead(BOTON5) == LOW) estado = ESPERA6;
         break;
 
       // Sumas y restas (igual que antes)

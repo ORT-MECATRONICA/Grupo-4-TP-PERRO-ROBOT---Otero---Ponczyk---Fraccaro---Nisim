@@ -87,6 +87,55 @@ int valorLDR = 0;
 #define RESTAGMT 74
 #define RESTAENVIO 73
 
+// ---------------- MQTT + NTP ----------------
+#include "AsyncMqttClient.h"
+#include "time.h"
+
+const char name_device = 14;  // GRUPO 4 → 14
+unsigned long now = millis();
+unsigned long lastMeasure1 = 0;
+unsigned long lastMeasure2 = 0;
+
+unsigned long interval_envio = 30000;
+unsigned long interval_leeo = 60000;
+
+long unsigned int timestamp;
+
+const char* ntpServer = "south-america.pool.ntp.org";
+long gmtOffsetUser = 0;
+const int daylightOffset_sec = 0;
+
+// ---- COLA DE SENSORES ----
+typedef struct {
+  long time;
+  float T1;
+  float H1;
+  float luz;
+  float gasMQ4;
+  float gasMQ9;
+} estructura;
+
+const int valor_max_struct = 1000;
+estructura datos_struct[valor_max_struct];
+estructura aux2;
+int indice_entra = 0;
+int indice_saca = 0;
+bool flag_vacio = 1;
+
+// ---- MQTT ----
+#define MQTT_HOST IPAddress(10, 162, 24, 3)
+#define MQTT_PORT 1884
+#define MQTT_USERNAME "esp32"
+#define MQTT_PASSWORD "mirko15"
+
+AsyncMqttClient mqttClient;
+TimerHandle_t mqttReconnectTimer;
+TimerHandle_t wifiReconnectTimer;
+
+char mqtt_payload[200];
+#define MQTT_PUB "/esp32/datos_sensores"
+
+
 TaskHandle_t Tarea1;
 TaskHandle_t Tarea2;
 
@@ -107,8 +156,10 @@ void setup() {
   uLuz = preferences.getInt("uLuz", 50);
   uMq4 = preferences.getInt("uMq4", 50);
   uMq9 = preferences.getInt("uMq9", 50);
-  uGmt = preferences.getInt("uGmt", 0);
   uEnvio = preferences.getInt("uEnvio", 30);
+  uGmt = preferences.getInt("uGmt", -3);
+  gmtOffsetUser = uGmt * 3600;
+  configTime(gmtOffsetUser, daylightOffset_sec, ntpServer);
 
   Wire.begin(SDA_PIN, SCL_PIN);
   lcd.init();
@@ -126,6 +177,9 @@ void setup() {
   lcd.clear();
   lcd.print("WiFi Conectado!");
   Serial.println("\nWiFi conectado");
+
+  configTime(gmtOffsetUser, daylightOffset_sec, ntpServer);
+  setupmqtt();
 
   if (!aht.begin(&Wire)) {
     Serial.println("❌ Error: No se detectó el AHT10.");
@@ -155,25 +209,21 @@ void setup() {
 
 void CodigoTarea1(void* pvParameters) {
   for (;;) {
-    if (digitalRead(BOTON1) == LOW) {
-      Serial.println("1");
-    }
-    if (digitalRead(BOTON2) == LOW) {
-      Serial.println("2");
-    }
-    if (digitalRead(BOTON3) == LOW) Serial.println("3");
-    if (digitalRead(BOTON4) == LOW) Serial.println("4");
-    if (digitalRead(BOTON5) == LOW) Serial.println("5");
     unsigned long now = millis();
+    time_t nowTime = time(NULL);
+    struct tm timeinfo;
+    localtime_r(&nowTime, &timeinfo);
 
 
     // Leer sensores cada uEnvio segundos
-    /*
+
     if (millis() - millis_valor > uEnvio * 1000UL) {
-    //  leerSensores();
+      interval_envio = uEnvio * 1000UL;
+      leerSensores();
+      enviarMqtt();
       millis_valor = millis();
     }
-  */
+
     switch (estado) {
       case RST:
         millis_valor = millis();
@@ -181,12 +231,9 @@ void CodigoTarea1(void* pvParameters) {
         break;
 
       case MENU:
-        if (estado != ultimoEstado) {
-          lcd.clear();
-          menu();
-          Serial.println("MENU");
-          ultimoEstado = estado;
-        }
+        menu();
+        Serial.println("MENU");
+
 
         if (digitalRead(BOTON1) == LOW) estado = ESPERA1;
         if (digitalRead(BOTON2) == LOW) estado = ESPERA2;
@@ -198,27 +245,43 @@ void CodigoTarea1(void* pvParameters) {
 
 
       case ESPERA1:
-        if (digitalRead(BOTON1) == HIGH) estado = TEMP;
+        if (digitalRead(BOTON1) == HIGH) {
+          lcd.clear();
+          estado = TEMP;
+        }
         break;
 
       case ESPERA2:
-        if (digitalRead(BOTON2) == HIGH) estado = LUZ;
+        if (digitalRead(BOTON2) == HIGH) {
+          lcd.clear();
+          estado = LUZ;
+        }
         break;
 
       case ESPERA3:
-        if (digitalRead(BOTON3) == HIGH) estado = GAS;
+        if (digitalRead(BOTON3) == HIGH) {
+          lcd.clear();
+          estado = GAS;
+        }
         break;
 
       case ESPERA4:
-        if (digitalRead(BOTON4) == HIGH) estado = GMT;
+        if (digitalRead(BOTON4) == HIGH) {
+          lcd.clear();
+          estado = GMT;
+        }
         break;
 
       case ESPERA5:
-        if (digitalRead(BOTON5) == HIGH) estado = ENVIO;
+        if (digitalRead(BOTON5) == HIGH) {
+          lcd.clear();
+          estado = ENVIO;
+        }
         break;
 
       case ESPERA6:
-        if (digitalRead(BOTON5) == HIGH || digitalRead(BOTON5) == !LOW) {
+        if (digitalRead(BOTON5) == HIGH) {
+          lcd.clear();
           estado = MENU;
         }
         break;
@@ -353,6 +416,9 @@ void CodigoTarea1(void* pvParameters) {
           uGmt++;
           if (uGmt > 12) uGmt = -12;
           preferences.putInt("uGmt", uGmt);
+          gmtOffsetUser = uGmt * 3600;
+          configTime(gmtOffsetUser, daylightOffset_sec, ntpServer);
+
           estado = GMT;
         }
         break;
@@ -361,6 +427,9 @@ void CodigoTarea1(void* pvParameters) {
           uGmt--;
           if (uGmt < -12) uGmt = 12;
           preferences.putInt("uGmt", uGmt);
+          gmtOffsetUser = uGmt * 3600;
+          configTime(gmtOffsetUser, daylightOffset_sec, ntpServer);
+
           estado = GMT;
         }
         break;
@@ -434,20 +503,20 @@ void loop() {
 //========FUNCIONES==========
 
 void leerSensores() {
-  //lecturaMQ4 = analogRead(MQ4_PIN);
-  //valorMQ4 = map(lecturaMQ4, 0, 4095, 0, 100);
-  //lecturaMQ9 = analogRead(MQ9_PIN);
-  //valorMQ9 = map(lecturaMQ9, 0, 4095, 0, 100);
-  // valorLDR = map(analogRead(LDR_PIN), 0, 4095, 0, 100);
+  lecturaMQ4 = analogRead(MQ4_PIN);
+  valorMQ4 = map(lecturaMQ4, 0, 4095, 0, 100);
+  lecturaMQ9 = analogRead(MQ9_PIN);
+  valorMQ9 = map(lecturaMQ9, 0, 4095, 0, 100);
+  valorLDR = map(analogRead(LDR_PIN), 0, 4095, 0, 100);
 
-  //sensors_event_t humidity, temp;
-  //aht.getEvent(&humidity, &temp);
+  sensors_event_t humidity, temp;
+  aht.getEvent(&humidity, &temp);
 
-  //t = temp.temperature;
-  // h = humidity.relative_humidity;
+  t = temp.temperature;
+  h = humidity.relative_humidity;
 
-  // Serial.printf("Temp: %.1f°C  Hum: %.1f%%  MQ4:%d%% MQ9:%d%% LDR:%d%%\n",
-  //  t, h, valorMQ4, valorMQ9, valorLDR);
+  Serial.printf("Temp: %.1f°C  Hum: %.1f%%  MQ4:%d%% MQ9:%d%% LDR:%d%%\n",
+                t, h, valorMQ4, valorMQ9, valorLDR);
 }
 
 
@@ -479,55 +548,185 @@ void handleNewMessages(int numNewMessages) {
 
 void menu(void) {
   lcd.setCursor(0, 0);
-  lcd.print("MENU:1:TEM 2:LUZ");
+  lcd.print("1:Th 2:LUZ 3:GAS");
   lcd.setCursor(0, 1);
-  lcd.print("3:GAS 4:GMT 5:EN");
+  lcd.print("4:GMT 5:ENVIO");
 }
 
 void ptemp(void) {
   lcd.setCursor(0, 0);
-  lcd.print("TEMP: ");
-  lcd.print(uTemp);
-  lcd.print(" C   ");
+  lcd.print("T:");
+  lcd.print(t, 1);  // temperatura medida
+  lcd.print("C Um:");
+  lcd.print(uTemp);  // umbral
+  lcd.print(" ");
+
   lcd.setCursor(0, 1);
-  lcd.print("HUM : ");
-  lcd.print(uHum);
-  lcd.print(" %   ");
+  lcd.print("H:");
+  lcd.print(h, 1);  // humedad medida
+  lcd.print("% Um:");
+  lcd.print(uHum);  // umbral
+  lcd.print(" ");
 }
+
 
 void pluz(void) {
   lcd.setCursor(0, 0);
-  lcd.print(" UMBRAL DE LUZ ");
+  lcd.print("Luz:");
+  lcd.print(valorLDR);  // medicion en %
+  lcd.print("% Um:");
+  lcd.print(uLuz);  // umbral
+  lcd.print(" ");
+
   lcd.setCursor(0, 1);
-  lcd.print(uLuz);
-  lcd.print(" %   ↑↓ Cambiar");
+  lcd.print("Cambiar        ");
 }
+
 
 void pgas(void) {
   lcd.setCursor(0, 0);
-  lcd.print("MQ4: ");
-  lcd.print(uMq4);
-  lcd.print(" %     ");
+  lcd.print("MQ4:");
+  lcd.print(valorMQ4);  // medición MQ4
+  lcd.print("% Um:");
+  lcd.print(uMq4);  // umbral
+  lcd.print(" ");
+
   lcd.setCursor(0, 1);
-  lcd.print("MQ9: ");
-  lcd.print(uMq9);
-  lcd.print(" %     ");
+  lcd.print("MQ9:");
+  lcd.print(valorMQ9);  // medición MQ9
+  lcd.print("% Um:");
+  lcd.print(uMq9);  // umbral
+  lcd.print(" ");
 }
+
 
 void pgmt(void) {
   lcd.setCursor(0, 0);
-  lcd.print(" AJUSTE DE GMT ");
+  lcd.print(" AJUSTE DE GMT    ");
   lcd.setCursor(0, 1);
-  lcd.print("UTC ");
+  lcd.print(" UTC ");
   if (uGmt >= 0) lcd.print("+");
   lcd.print(uGmt);
-  lcd.print("   ↑↓ Cambiar");
+  lcd.print(" Cambiar   ");
 }
 
 void penvio(void) {
   lcd.setCursor(0, 0);
-  lcd.print(" INTERVALO ENVIO ");
+  lcd.print("INTERVALO ENVIO   ");
   lcd.setCursor(0, 1);
+  lcd.print("Tiempo: ");
   lcd.print(uEnvio);
-  lcd.print(" s   ↑↓ Cambiar");
+  lcd.print(" s  ");
+}
+
+void setupmqtt() {
+  mqttReconnectTimer = xTimerCreate("mqttTimer",
+                                    pdMS_TO_TICKS(2000), pdFALSE, (void*)0,
+                                    reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
+
+  wifiReconnectTimer = xTimerCreate("wifiTimer",
+                                    pdMS_TO_TICKS(2000), pdFALSE, (void*)0,
+                                    reinterpret_cast<TimerCallbackFunction_t>(connectToWifi));
+
+  WiFi.onEvent(WiFiEvent);
+  mqttClient.onConnect(onMqttConnect);
+  mqttClient.onDisconnect(onMqttDisconnect);
+  mqttClient.onPublish(onMqttPublish);
+
+  mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+  mqttClient.setCredentials(MQTT_USERNAME, MQTT_PASSWORD);
+  connectToWifi();
+}
+
+void connectToWifi() {
+  Serial.println("Connecting to Wi-Fi...");
+  WiFi.begin(ssid, password);
+}
+
+void connectToMqtt() {
+  Serial.println("Connecting to MQTT...");
+  mqttClient.connect();
+}
+
+void WiFiEvent(WiFiEvent_t event) {
+  switch (event) {
+    case SYSTEM_EVENT_STA_GOT_IP:
+      connectToMqtt();
+      break;
+    case SYSTEM_EVENT_STA_DISCONNECTED:
+      xTimerStop(mqttReconnectTimer, 0);
+      xTimerStart(wifiReconnectTimer, 0);
+      break;
+  }
+}
+
+void onMqttConnect(bool sessionPresent) {
+  Serial.println("MQTT conectado");
+}
+
+void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
+  if (WiFi.isConnected()) xTimerStart(mqttReconnectTimer, 0);
+}
+
+void onMqttPublish(uint16_t packetId) {}
+
+void fun_entra() {
+  if (indice_entra >= valor_max_struct) indice_entra = 0;
+
+  timestamp = time(NULL);
+  struct tm timeinfo;
+  getLocalTime(&timeinfo);
+
+  datos_struct[indice_entra].time = timestamp;
+  datos_struct[indice_entra].T1 = t;          // temp real
+  datos_struct[indice_entra].H1 = h;          // hum real
+  datos_struct[indice_entra].luz = valorLDR;  // LDR real
+  datos_struct[indice_entra].gasMQ4 = valorMQ4;
+  datos_struct[indice_entra].gasMQ9 = valorMQ9;
+
+  indice_entra++;
+  flag_vacio = 0;
+}
+
+void fun_saca() {
+  if (indice_saca != indice_entra) {
+    aux2 = datos_struct[indice_saca];
+
+    indice_saca++;
+    if (indice_saca >= valor_max_struct) indice_saca = 0;
+
+    flag_vacio = 0;
+  } else {
+    flag_vacio = 1;
+  }
+}
+
+void fun_envio_mqtt() {
+  fun_saca();
+  if (flag_vacio == 1) return;
+
+  snprintf(
+    mqtt_payload, 200,
+    "{\"device\":%u,\"time\":%ld,\"T\":%.2f,\"H\":%.2f,\"Luz\":%.1f,\"MQ4\":%.1f,\"MQ9\":%.1f}",
+    name_device, aux2.time, aux2.T1, aux2.H1, aux2.luz, aux2.gasMQ4, aux2.gasMQ9);
+
+  mqttClient.publish(MQTT_PUB, 1, true, mqtt_payload);
+}
+
+void enviarMqtt() {
+  StaticJsonDocument<200> doc;
+
+  doc["timestamp"] = time(nullptr);
+  doc["temp"] = t;
+  doc["hum"] = h;
+  doc["luz"] = valorLDR;
+  doc["mq4"] = valorMQ4;
+  doc["mq9"] = valorMQ9;
+
+  char buffer[200];
+  size_t n = serializeJson(doc, buffer);
+
+  mqttClient.publish(MQTT_PUB, 0, false, buffer, n);
+  Serial.println("MQTT enviado: ");
+  Serial.println(buffer);
 }
